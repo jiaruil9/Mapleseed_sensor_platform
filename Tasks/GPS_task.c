@@ -129,7 +129,8 @@ static void GPS_GGA_parse_full(char * msg, char idx)
 
 }
 
-
+/********************** GPS Sensor Connection **********************/
+/********* GND - GND, 3V3 - 3V3, TX - DIO2, PWR - DIO12  *********/
 
 /*
  *  ======== mainThread ========

@@ -54,18 +54,7 @@ extern void *mainThread(void *arg0);
 
 void cc1310_usleep(uint32_t usecs, uint32_t ticks_offset)
 {
-//  static uint32_t sleep_time = 0;
-    static uint32_t raw_sleep_time = 0;
-    raw_sleep_time = (usecs / Clock_tickPeriod);
-    // Make sure that if sleep_time will result in negative value, set to 0
-//  sleep_time = raw_sleep_time < ticks_offset ? 0 : raw_sleep_time - ticks_offset;
-    //Task_sleep(usecs / Clock_tickPeriod);
-    //if (raw_sleep_time < sleep_time) {
-        Task_sleep(raw_sleep_time);
-    //}
-    //else {
-    //  Task_sleep(sleep_time);
-    //}
+    Task_sleep((usecs/2) / Clock_tickPeriod);
 }
 
 
