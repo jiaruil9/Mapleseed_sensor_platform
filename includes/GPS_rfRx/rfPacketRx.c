@@ -33,6 +33,7 @@
 /***** Includes *****/
 /* Standard C Libraries */
 #include <stdlib.h>
+#include <string.h>
 
 /* TI Drivers */
 #include <ti/drivers/rf/RF.h>
@@ -43,6 +44,7 @@
 
 /* Board Header files */
 #include "Board.h"
+#include "gpsParser.h"
 
 /* Application Header files */
 #include "RFQueue.h"
@@ -76,14 +78,6 @@ static PIN_State ledPinState;
 UART_Handle uart;
 UART_Params uartParams;
 
-/* Some useful char to print */
-const char  latitude[] = "latitude:\t";
-const char  longitude[] = "longitude:\t";
-const char  colon[] = ":" ;
-const char  period[] = ".";
-const char  newline[] = "\r\n";
-const char  tab[] = "\t";
-const char  deg[] = " ";
 
 /* Buffer which contains all Data Entries for receiving data.
  * Pragmas are needed to make sure this buffer is 4 byte aligned (requirement from the RF Core) */
@@ -128,134 +122,24 @@ PIN_Config pinTable[] =
 	PIN_TERMINATE
 };
 
-/* GPS message struct */
-struct gps_msg_full_t
-{
-    //35 bytes
-    uint8_t time[9];
-    uint8_t latitude[8];
-    uint8_t N_S[1];
-    uint8_t longitude[9];
-    uint8_t E_W[1];
-    uint8_t quality_indicator;
-    uint8_t sat_num[2];
-    uint8_t horizontal_resolution[2];
-    uint8_t altitude[4];
-};
+/* stores all data received from GPS (defined in gpsParser.h) */
+GPSData data;
 
-struct gps_msg_full_t gps_full_msgs[2];
-uint8_t msg_parsed [55];
+/* string used for storing parsed output from GPS message parser */
+char msg_parsed [120];
 
 /***** Function definitions *****/
 
 
 /* msg parser */
 /* Parsing a GPGGA msg into a form of {hr:min:sec latitude: [deg] [min]   longtitude: [deg] [min]} */
-
-static void GPS_GGA_parse_full(uint8_t * msg, char idx, uint8_t * result)
+/* interfaces with the gpsParser.h library */
+static void GPS_parse_full(char * msg, char * result)
 {
-    gps_full_msgs[idx].time[0] = msg[7];
-    gps_full_msgs[idx].time[1] = msg[8];
-    gps_full_msgs[idx].time[2] = msg[9];
-    gps_full_msgs[idx].time[3] = msg[10];
-    gps_full_msgs[idx].time[4] = msg[11];
-    gps_full_msgs[idx].time[5] = msg[12];
-    //skip period
-    gps_full_msgs[idx].time[6] = msg[14];
-    gps_full_msgs[idx].time[7] = msg[15];
-    gps_full_msgs[idx].time[8] = msg[16];
-    //skip comma
-    gps_full_msgs[idx].latitude[0] = msg[18];
-    gps_full_msgs[idx].latitude[1] = msg[19];
-    gps_full_msgs[idx].latitude[2] = msg[20];
-    gps_full_msgs[idx].latitude[3] = msg[21];
-    //skip period
-    gps_full_msgs[idx].latitude[4] = msg[23];
-    gps_full_msgs[idx].latitude[5] = msg[24];
-    gps_full_msgs[idx].latitude[6] = msg[25];
-    gps_full_msgs[idx].latitude[7] = msg[26];
-    //skip comma is 27
-    gps_full_msgs[idx].N_S[0] = msg[28];
-
-    //skip comma is 29
-    gps_full_msgs[idx].longitude[0] = msg[30];
-    gps_full_msgs[idx].longitude[1] = msg[31];
-    gps_full_msgs[idx].longitude[2] = msg[32];
-    gps_full_msgs[idx].longitude[3] = msg[33];
-    gps_full_msgs[idx].longitude[4] = msg[34];
-    // skip period is 35
-    gps_full_msgs[idx].longitude[5] = msg[36];
-    gps_full_msgs[idx].longitude[6] = msg[37];
-    gps_full_msgs[idx].longitude[7] = msg[38];
-    gps_full_msgs[idx].longitude[8] = msg[39];
-    //skip comma is 40
-    gps_full_msgs[idx].E_W[0] = msg[41];
-    //skip comma
-    gps_full_msgs[idx].quality_indicator = msg[43];
-    //skip comma
-    gps_full_msgs[idx].sat_num[0] = msg[45];
-    gps_full_msgs[idx].sat_num[1] = msg[46];
-    //skip comma
-    gps_full_msgs[idx].horizontal_resolution[0] = msg[48];
-    //skip period
-    gps_full_msgs[idx].horizontal_resolution[1] = msg[50];
-    //skip comma
-    gps_full_msgs[idx].altitude[0] = msg[52];
-    gps_full_msgs[idx].altitude[1] = msg[53];
-    gps_full_msgs[idx].altitude[2] = msg[54];
-    //skip comma
-    gps_full_msgs[idx].altitude[3] = msg[56];
-
-    uint8_t * infoptr = result;
-    memcpy(infoptr, gps_full_msgs[1].time, 2);
-    infoptr += 2;
-    memcpy(infoptr, colon, 1);
-    infoptr ++;
-    memcpy(infoptr, gps_full_msgs[1].time+2, 2);
-    infoptr += 2;
-    memcpy(infoptr, colon, 1);
-    infoptr ++;
-    memcpy(infoptr, gps_full_msgs[1].time+4, 2);
-    infoptr += 2;
-    memcpy(infoptr, tab,1);
-    infoptr ++;
-    memcpy(infoptr, latitude,sizeof(latitude));
-    infoptr += 10;
-    memcpy(infoptr, gps_full_msgs[1].latitude,2);
-    infoptr += 2;
-    memcpy(infoptr, deg, sizeof(deg));
-    infoptr ++;
-    memcpy(infoptr, gps_full_msgs[1].latitude+2, 2);
-    infoptr += 2;
-    memcpy(infoptr, period, 1);
-    infoptr ++;
-    memcpy(infoptr, gps_full_msgs[1].latitude+4, 4);
-    infoptr += 4;
-    memcpy(infoptr, gps_full_msgs[1].N_S, 1);
-    infoptr ++;
-    memcpy(infoptr, tab,sizeof(newline));
-    infoptr ++;
-    memcpy(infoptr, longitude,sizeof(longitude));
-    infoptr += 11;
-    if (gps_full_msgs[1].longitude[0] == '0'){
-        memcpy(infoptr, gps_full_msgs[1].longitude+1,2);
-        infoptr +=2;
-    }else{
-        memcpy(infoptr, gps_full_msgs[1].longitude,3);
-        infoptr +=3;
-    }
-    memcpy(infoptr, deg, sizeof(deg));
-    infoptr ++;
-    memcpy(infoptr, gps_full_msgs[1].longitude+3,2);
-    infoptr +=2;
-    memcpy(infoptr, period, 1);
-    infoptr ++;
-    memcpy(infoptr, gps_full_msgs[1].longitude+5,3);
-    infoptr +=3;
-    memcpy(infoptr, gps_full_msgs[1].E_W, 1);
-    infoptr ++;
-    memcpy(infoptr, newline,sizeof(newline));
-    infoptr +=2;
+    memset(msg_parsed, '\0', sizeof(msg_parsed));
+    nmeaReceiveSentence(&data, msg);
+    nmeaParse(&data);
+    nmeaToString(&data, result);
 }
 
 void *mainThread(void *arg0)
@@ -264,9 +148,6 @@ void *mainThread(void *arg0)
     RF_Params_init(&rfParams);
 
     /* UART */
-
-
-
     UART_init();
     UART_Params_init(&uartParams);
     uartParams.writeMode = UART_MODE_BLOCKING;
@@ -321,6 +202,9 @@ void *mainThread(void *arg0)
 
     /* Set the frequency */
     RF_postCmd(rfHandle, (RF_Op*)&RF_cmdFs, RF_PriorityNormal, NULL, 0);
+    
+    /* Initialize GPSData struct */
+    nmeaDataInit(&data);
 
     /* Enter RX mode and stay forever in RX */
     RF_EventMask terminationReason = RF_runCmd(rfHandle, (RF_Op*)&RF_cmdPropRx,
@@ -422,13 +306,29 @@ void callback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
         /* Handle the packet data, located at &currentDataEntry->data:
          * - Length is the first byte with the current configuration
          * - Data starts from the second byte */
-        packetLength      = *(uint8_t*)(&currentDataEntry->data);
-        packetDataPointer = (uint8_t*)(&currentDataEntry->data + 1);
+        packetLength      = *(uint8_t*) (&currentDataEntry->data);
+        packetDataPointer =  (uint8_t*) (&currentDataEntry->data + 1);
 
         /* Copy the payload + the status byte to the packet variable */
         memcpy(packet, packetDataPointer, (packetLength + 1));
-        GPS_GGA_parse_full(packet+2, 1, msg_parsed);
-        UART_write(uart, msg_parsed, sizeof(msg_parsed));
+
+        /* Find the start and end of message; make sure a checksum is present */
+        char * packet_msg_begin = memchr(packet, '$', sizeof(packet));
+        char * packet_msg_end   = memchr(packet, '\n', sizeof(packet));
+        char * checksum_present = memchr(packet, '*', sizeof(packet));
+
+        /* As long as we found the start, end, and checksum, try to parse the msg */
+        if (packet_msg_begin && packet_msg_end && checksum_present) {
+
+            /* Make sure there's a null terminator */
+            *(packet_msg_end + 1) = '\0';
+            GPS_parse_full(packet_msg_begin, msg_parsed);
+
+            /* Only print if we've received new usable data */
+            if (data.nmeaData.msgType == GPRMC || data.nmeaData.msgType == GPGGA)
+                UART_write(uart, msg_parsed, sizeof(msg_parsed));
+        }
+
         RFQueue_nextEntry();
     }
 }
