@@ -178,9 +178,12 @@ void *mainThread(void *arg0)
         ++count;
         if (input == '\n')
         {
-             // Once we finish a line, check if msg is a GPGGA
-            if (message[3] == 'G' && message[4] == 'G' && message[5] == 'A')
+             // Once we finish a line, check if msg is GGA or RMC
+
+            if ( (message[3] == 'G' && message[4] == 'G' && message[5] == 'A') ||
+                     (message[3] == 'R' && message[4] == 'M' && message[5] == 'C')   )
             {
+
                 uint8_t i = 0;
                 packet[0] = (uint8_t)(seqNumber >> 8);
                 packet[1] = (uint8_t)(seqNumber ++);
@@ -265,5 +268,6 @@ void *mainThread(void *arg0)
         }
         count = 0;
         }
+
     }
 }
